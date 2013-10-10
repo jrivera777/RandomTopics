@@ -5,7 +5,8 @@
 #include <math.h>
 
 #define DATA_POINTS 100
-#define THRESHOLD .25
+#define THRESHOLD .10
+#define RULES 3
 
 struct Point
 {
@@ -79,7 +80,7 @@ double average(double *d, int cnt)
 
 int main(int argc, char **argv)
 {
-    int i, j;
+    int i, j, iter;
     int k;
     int min_index;
     double min_dist;
@@ -105,22 +106,23 @@ int main(int argc, char **argv)
     generate_points(DATA_POINTS, data, 0, 0, 0, 0);
 
     //label centroids
-    /* printf("Initial Centroids\n"); */
-    /* printf("=================\n"); */
+    printf("Initial Centroids\n");
+    printf("=================\n");
     for(i = 0; i < k; i++)
     {
-	/* printf("{%f, %f}\n", centroids[i].x, centroids[i].y); */
+	printf("{%f, %f}\n", centroids[i].x, centroids[i].y);
 	centroids[i].label = i;
     }
 
-    char *gnuplot_commands[3];
-    gnuplot_commands[0] = "set title 'K-Means Clustering'";
-    gnuplot_commands[1] = "unset key";
-    char* plot = malloc(sizeof(char) * (k+1) * (strlen("plot  data_clust.dat") + k));
-    strcat(plot, "plot ");
 
+    iter = 0;
     do
     {
+	char *gnuplot_commands[RULES];
+	gnuplot_commands[1] = "unset key";
+	char *plot = malloc(sizeof(char) *(k + 2) * strlen("  'data_clust.dat'  ,") + 20);
+	strcat(plot, "plot ");
+
 	//label all sample data from initial centroids
 	for(i = 0; i < DATA_POINTS; i++)
 	{
@@ -138,14 +140,17 @@ int main(int argc, char **argv)
 		data[i].label = min_index;
 	    }
 	}
+
+	//write out data points for this iteration
 	for(i = 0; i < k; i++)
 	{
 	    char fname[strlen("data_clust.dat") + k];
 	    sprintf(fname, "data_clust%d.dat", i);
 	    file = fopen(fname, "w");
-	    // strcat(plot, fname);
+	    strcat(plot, "'");
+	    strcat(plot, fname);
+	    strcat(plot, "', ");
 
-	    //  strcat(plot, " ");
 	    if(file == NULL)
 	    {
 		perror("Failed to open data file");
@@ -158,29 +163,46 @@ int main(int argc, char **argv)
 	    }
 	    fclose(file);
 	}
+
 	char cenName[strlen("cent.dat") + k];
 	sprintf(cenName, "cent_%d.dat", i);
 	file = fopen(cenName, "w");
-	/* strcat(plot, cenName); */
+	strcat(plot, "'");
+	strcat(plot, cenName);
+	strcat(plot, "' ");
 	if(file == NULL)
 	{
 	    perror("Failed to open init_cent.dat");
 	    return -1;
 	}
 
-	//write out initial centroids
+	//write out centroids
 	for(i = 0; i < k; i++)
 	{
 	    fprintf(file,"%f %f\n", centroids[i].x, centroids[i].y);
 	}
 	fclose(file);
+
 	//plot clusters and centroids
-	/* printf("plot = %s\n", plot); */
-	/* gnuplot_commands[2] = plot; */
+	gnuplot_commands[0] = malloc(sizeof(char) * strlen("set title 'K-Means Clustering Iter' ") + iter + 1);
+	sprintf(gnuplot_commands[0], "set title 'K-Means Clustering Iter %d'", iter);
+	gnuplot_commands[2] = plot;
+
+	//print commands
+	printf("\n");
+	for(i = 0; i < RULES; i++)
+	{
+	    printf("%s\n", gnuplot_commands[i]);
+	}
+
+	FILE *gnuplotPipe = popen("gnuplot -persistent", "w");
+	for(i = 0; i < RULES; i++)
+	    fprintf(gnuplotPipe, "%s \n", gnuplot_commands[i]);
+	fclose(gnuplotPipe);
 
 	//calculate new centroids based on initial clustering
-	//printf("New Centroids\n");
-	//printf("=============\n");
+	printf("New Centroids\n");
+	printf("=============\n");
 	for(i = 0; i < k; i++)
 	{
 	    struct Point * mean = get_centroid_mean(&centroids[i],
@@ -192,8 +214,11 @@ int main(int argc, char **argv)
 	    centroids[i].x = mean->x;
 	    centroids[i].y = mean->y;
 	    free(mean);
-	    /* printf("{%f, %f}\n", centroids[i].x, centroids[i].y); */
+	    printf("{%f, %f}\n", centroids[i].x, centroids[i].y);
 	}
+	printf("\n");
+//	free(plot);
+	iter++;
     }
     while(average(delt_perc, k) > THRESHOLD);
 
